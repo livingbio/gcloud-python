@@ -1,23 +1,12 @@
-# Copyright 2014 Google Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Shortcut methods for getting set up with Google Cloud Storage.
 
 You'll typically use these to get started with the API:
 
 >>> import gcloud.storage
->>> bucket = gcloud.storage.get_bucket('bucket-id-here', 'project-id')
+>>> bucket = gcloud.storage.get_bucket('bucket-id-here',
+                                       'project-id',
+                                       'long-email@googleapis.com',
+                                       '/path/to/private.key')
 >>> # Then do other things...
 >>> key = bucket.get_key('/remote/path/to/file.txt')
 >>> print key.get_contents_as_string()
@@ -37,44 +26,53 @@ The main concepts with this API are:
   machine).
 """
 
-from gcloud import credentials
-from gcloud.storage.connection import Connection
-
+__version__ = '0.1'
 
 SCOPE = ('https://www.googleapis.com/auth/devstorage.full_control',
          'https://www.googleapis.com/auth/devstorage.read_only',
          'https://www.googleapis.com/auth/devstorage.read_write')
 
 
-def get_connection(project):
+def get_connection(project, client_email, private_key_path):
     """Shortcut method to establish a connection to Cloud Storage.
 
     Use this if you are going to access several buckets with the same
     set of credentials:
 
     >>> from gcloud import storage
-    >>> connection = storage.get_connection(project)
+    >>> connection = storage.get_connection(project, email, key_path)
     >>> bucket1 = connection.get_bucket('bucket1')
     >>> bucket2 = connection.get_bucket('bucket2')
 
     :type project: string
     :param project: The name of the project to connect to.
 
+    :type client_email: string
+    :param client_email: The e-mail attached to the service account.
+
+    :type private_key_path: string
+    :param private_key_path: The path to a private key file (this file was
+                             given to you when you created the service
+                             account).
+
     :rtype: :class:`gcloud.storage.connection.Connection`
     :returns: A connection defined with the proper credentials.
     """
-    implicit_credentials = credentials.get_credentials()
-    scoped_credentials = implicit_credentials.create_scoped(SCOPE)
-    return Connection(project=project, credentials=scoped_credentials)
+    from gcloud import credentials
+    from gcloud.storage.connection import Connection
+
+    svc_account_credentials = credentials.get_for_service_account(
+        client_email, private_key_path, scope=SCOPE)
+    return Connection(project=project, credentials=svc_account_credentials)
 
 
-def get_bucket(bucket_name, project):
+def get_bucket(bucket_name, project, client_email, private_key_path):
     """Shortcut method to establish a connection to a particular bucket.
 
     You'll generally use this as the first call to working with the API:
 
     >>> from gcloud import storage
-    >>> bucket = storage.get_bucket(project, bucket_name)
+    >>> bucket = storage.get_bucket(project, bucket_name, email, key_path)
     >>> # Now you can do things with the bucket.
     >>> bucket.exists('/path/to/file.txt')
     False
@@ -86,8 +84,16 @@ def get_bucket(bucket_name, project):
     :type project: string
     :param project: The name of the project to connect to.
 
+    :type client_email: string
+    :param client_email: The e-mail attached to the service account.
+
+    :type private_key_path: string
+    :param private_key_path: The path to a private key file (this file was
+                             given to you when you created the service
+                             account).
+
     :rtype: :class:`gcloud.storage.bucket.Bucket`
     :returns: A bucket with a connection using the provided credentials.
     """
-    connection = get_connection(project)
+    connection = get_connection(project, client_email, private_key_path)
     return connection.get_bucket(bucket_name)

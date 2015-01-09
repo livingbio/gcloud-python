@@ -1,66 +1,49 @@
-# Copyright 2014 Google Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import datetime
 import pytz
 import unittest2
 
 from gcloud import datastore
-from gcloud.datastore.entity import Entity
-from gcloud.datastore.key import Key
-from gcloud.datastore.query import Query
-from gcloud.datastore.transaction import Transaction
 # This assumes the command is being run via tox hence the
 # repository root is the current directory.
 from regression import populate_datastore
-
-
-datastore._DATASET_ENV_VAR_NAME = 'GCLOUD_TESTS_DATASET_ID'
-datastore.set_default_dataset_id()
-datastore.set_default_connection()
+from regression import regression_utils
 
 
 class TestDatastore(unittest2.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = regression_utils.get_dataset()
 
     def setUp(self):
         self.case_entities_to_delete = []
 
     def tearDown(self):
-        with Transaction():
+        with self.dataset.transaction():
             for entity in self.case_entities_to_delete:
-                entity.key.delete()
+                entity.delete()
 
 
 class TestDatastoreAllocateIDs(TestDatastore):
 
     def test_allocate_ids(self):
-        num_ids = 10
-        allocated_keys = datastore.allocate_ids(Key('Kind'), num_ids)
-        self.assertEqual(len(allocated_keys), num_ids)
+        incomplete_key = datastore.key.Key(path=[{'kind': 'Kind'}])
+        incomplete_key_pb = incomplete_key.to_protobuf()
+        incomplete_key_pbs = [incomplete_key_pb] * 10
 
-        unique_ids = set()
+        connection = self.dataset.connection()
+        allocated_key_pbs = connection.allocate_ids(self.dataset.id(),
+                                                    incomplete_key_pbs)
+        allocated_keys = [datastore.helpers.key_from_protobuf(key_pb)
+                          for key_pb in allocated_key_pbs]
+        self.assertEqual(len(allocated_keys), 10)
         for key in allocated_keys:
-            unique_ids.add(key.id)
-            self.assertEqual(key.name, None)
-            self.assertNotEqual(key.id, None)
-
-        self.assertEqual(len(unique_ids), num_ids)
+            self.assertFalse(key.is_partial())
 
 
 class TestDatastoreSave(TestDatastore):
 
-    def _get_post(self, id_or_name=None, post_content=None):
+    def _get_post(self, name=None, key_id=None, post_content=None):
         post_content = post_content or {
             'title': u'How to make the perfect pizza in your grill',
             'tags': [u'pizza', u'grill'],
@@ -70,33 +53,37 @@ class TestDatastoreSave(TestDatastore):
             'wordCount': 400,
             'rating': 5.0,
         }
-        # Create an entity with the given content.
-        entity = Entity(key=Key('Post'))
+        # Create an entity with the given content in our dataset.
+        entity = self.dataset.entity(kind='Post')
         entity.update(post_content)
 
         # Update the entity key.
-        if id_or_name is not None:
-            entity.key = entity.key.completed_key(id_or_name)
+        key = None
+        if name is not None:
+            key = entity.key().name(name)
+        if key_id is not None:
+            key = entity.key().id(key_id)
+        if key is not None:
+            entity.key(key)
 
         return entity
 
     def _generic_test_post(self, name=None, key_id=None):
-        entity = self._get_post(id_or_name=(name or key_id))
+        entity = self._get_post(name=name, key_id=key_id)
         entity.save()
 
         # Register entity to be deleted.
         self.case_entities_to_delete.append(entity)
 
         if name is not None:
-            self.assertEqual(entity.key.name, name)
+            self.assertEqual(entity.key().name(), name)
         if key_id is not None:
-            self.assertEqual(entity.key.id, key_id)
-        retrieved_entity = datastore.get(entity.key)
+            self.assertEqual(entity.key().id(), key_id)
+        retrieved_entity = self.dataset.get_entity(entity.key())
         # Check the keys are the same.
-        self.assertEqual(retrieved_entity.key.path, entity.key.path)
-        self.assertEqual(retrieved_entity.key.namespace, entity.key.namespace)
-        self.assertTrue(_compare_dataset_ids(
-            retrieved_entity.key.dataset_id, entity.key.dataset_id))
+        self.assertEqual(retrieved_entity.key().path(), entity.key().path())
+        self.assertEqual(retrieved_entity.key().namespace(),
+                         entity.key().namespace())
 
         # Check the data is the same.
         retrieved_dict = dict(retrieved_entity.items())
@@ -113,7 +100,7 @@ class TestDatastoreSave(TestDatastore):
         self._generic_test_post()
 
     def test_save_multiple(self):
-        with Transaction():
+        with self.dataset.transaction():
             entity1 = self._get_post()
             entity1.save()
             # Register entity to be deleted.
@@ -133,37 +120,36 @@ class TestDatastoreSave(TestDatastore):
             # Register entity to be deleted.
             self.case_entities_to_delete.append(entity2)
 
-        keys = [entity1.key, entity2.key]
-        matches = datastore.get(keys)
+        keys = [entity1.key(), entity2.key()]
+        matches = self.dataset.get_entities(keys)
         self.assertEqual(len(matches), 2)
 
     def test_empty_kind(self):
-        query = Query(kind='Post')
-        posts = list(query.fetch(limit=2))
+        posts = self.dataset.query('Post').limit(2).fetch()
         self.assertEqual(posts, [])
 
 
 class TestDatastoreSaveKeys(TestDatastore):
 
     def test_save_key_self_reference(self):
-        key = Key('Person', 'name')
-        entity = Entity(key=key)
+        key = datastore.key.Key.from_path('Person', 'name')
+        entity = self.dataset.entity(kind=None).key(key)
         entity['fullName'] = u'Full name'
         entity['linkedTo'] = key  # Self reference.
 
         entity.save()
         self.case_entities_to_delete.append(entity)
 
-        query = Query(kind='Person')
-        query.add_filter('linkedTo', '=', key)
+        query = self.dataset.query('Person').filter(
+            'linkedTo =', key).limit(2)
 
-        stored_persons = list(query.fetch(limit=2))
+        stored_persons = query.fetch()
         self.assertEqual(len(stored_persons), 1)
 
         stored_person = stored_persons[0]
         self.assertEqual(stored_person['fullName'], entity['fullName'])
-        self.assertEqual(stored_person.key.path, key.path)
-        self.assertEqual(stored_person.key.namespace, key.namespace)
+        self.assertEqual(stored_person.key().path(), key.path())
+        self.assertEqual(stored_person.key().namespace(), key.namespace())
 
 
 class TestDatastoreQuery(TestDatastore):
@@ -172,43 +158,45 @@ class TestDatastoreQuery(TestDatastore):
     def setUpClass(cls):
         super(TestDatastoreQuery, cls).setUpClass()
         cls.CHARACTERS = populate_datastore.CHARACTERS
-        cls.ANCESTOR_KEY = Key(*populate_datastore.ANCESTOR)
+        cls.ANCESTOR_KEY = datastore.key.Key(
+            path=[populate_datastore.ANCESTOR])
 
     def _base_query(self):
-        return Query(kind='Character', ancestor=self.ANCESTOR_KEY)
+        return self.dataset.query('Character').ancestor(self.ANCESTOR_KEY)
 
     def test_limit_queries(self):
         limit = 5
-        query = self._base_query()
+        query = self._base_query().limit(limit)
+        # Verify there is not cursor before fetch().
+        self.assertRaises(RuntimeError, query.cursor)
 
         # Fetch characters.
-        iterator = query.fetch(limit=limit)
-        character_entities, _, cursor = iterator.next_page()
+        character_entities = query.fetch()
         self.assertEqual(len(character_entities), limit)
 
         # Check cursor after fetch.
+        cursor = query.cursor()
         self.assertTrue(cursor is not None)
 
-        # Fetch remaining of characters.
-        new_character_entities = list(iterator)
+        # Fetch next batch of characters.
+        new_query = self._base_query().with_cursor(cursor)
+        new_character_entities = new_query.fetch()
         characters_remaining = len(self.CHARACTERS) - limit
         self.assertEqual(len(new_character_entities), characters_remaining)
 
     def test_query_simple_filter(self):
-        query = self._base_query()
-        query.add_filter('appearances', '>=', 20)
+        query = self._base_query().filter('appearances >=', 20)
         expected_matches = 6
         # We expect 6, but allow the query to get 1 extra.
-        entities = list(query.fetch(limit=expected_matches + 1))
+        entities = query.fetch(limit=expected_matches + 1)
         self.assertEqual(len(entities), expected_matches)
 
     def test_query_multiple_filters(self):
-        query = self._base_query()
-        query.add_filter('appearances', '>=', 26)
-        query.add_filter('family', '=', 'Stark')
+        query = self._base_query().filter(
+            'appearances >=', 26).filter('family =', 'Stark')
         expected_matches = 4
         # We expect 4, but allow the query to get 1 extra.
-        entities = list(query.fetch(limit=expected_matches + 1))
+        entities = query.fetch(limit=expected_matches + 1)
         self.assertEqual(len(entities), expected_matches)
 
     def test_ancestor_query(self):
@@ -216,25 +204,24 @@ class TestDatastoreQuery(TestDatastore):
 
         expected_matches = 8
         # We expect 8, but allow the query to get 1 extra.
-        entities = list(filtered_query.fetch(limit=expected_matches + 1))
+        entities = filtered_query.fetch(limit=expected_matches + 1)
         self.assertEqual(len(entities), expected_matches)
 
     def test_query___key___filter(self):
-        rickard_key = Key(*populate_datastore.RICKARD)
+        rickard_key = datastore.key.Key(
+            path=[populate_datastore.ANCESTOR, populate_datastore.RICKARD])
 
-        query = self._base_query()
-        query.add_filter('__key__', '=', rickard_key)
+        query = self._base_query().filter('__key__ =', rickard_key)
         expected_matches = 1
         # We expect 1, but allow the query to get 1 extra.
-        entities = list(query.fetch(limit=expected_matches + 1))
+        entities = query.fetch(limit=expected_matches + 1)
         self.assertEqual(len(entities), expected_matches)
 
     def test_ordered_query(self):
-        query = self._base_query()
-        query.order = 'appearances'
+        query = self._base_query().order('appearances')
         expected_matches = 8
         # We expect 8, but allow the query to get 1 extra.
-        entities = list(query.fetch(limit=expected_matches + 1))
+        entities = query.fetch(limit=expected_matches + 1)
         self.assertEqual(len(entities), expected_matches)
 
         # Actually check the ordered data returned.
@@ -242,15 +229,14 @@ class TestDatastoreQuery(TestDatastore):
         self.assertEqual(entities[7]['name'], self.CHARACTERS[3]['name'])
 
     def test_projection_query(self):
-        filtered_query = self._base_query()
-        filtered_query.projection = ['name', 'family']
+        filtered_query = self._base_query().projection(['name', 'family'])
 
         # NOTE: There are 9 responses because of Catelyn. She has both
         #       Stark and Tully as her families, hence occurs twice in
         #       the results.
         expected_matches = 9
         # We expect 9, but allow the query to get 1 extra.
-        entities = list(filtered_query.fetch(limit=expected_matches + 1))
+        entities = filtered_query.fetch(limit=expected_matches + 1)
         self.assertEqual(len(entities), expected_matches)
 
         arya_entity = entities[0]
@@ -268,71 +254,74 @@ class TestDatastoreQuery(TestDatastore):
                          {'name': 'Catelyn', 'family': 'Tully'})
 
         # Check both Catelyn keys are the same.
-        catelyn_stark_key = catelyn_stark_entity.key
-        catelyn_tully_key = catelyn_tully_entity.key
-        self.assertEqual(catelyn_stark_key.path, catelyn_tully_key.path)
-        self.assertEqual(catelyn_stark_key.namespace,
-                         catelyn_tully_key.namespace)
-        # Also check the dataset_id since both retrieved from datastore.
-        self.assertEqual(catelyn_stark_key.dataset_id,
-                         catelyn_tully_key.dataset_id)
+        catelyn_stark_key = catelyn_stark_entity.key()
+        catelyn_tully_key = catelyn_tully_entity.key()
+        self.assertEqual(catelyn_stark_key.path(), catelyn_tully_key.path())
+        self.assertEqual(catelyn_stark_key.namespace(),
+                         catelyn_tully_key.namespace())
+        # Also check the _dataset_id since both retrieved from datastore.
+        self.assertEqual(catelyn_stark_key._dataset_id,
+                         catelyn_tully_key._dataset_id)
 
         sansa_entity = entities[8]
         sansa_dict = dict(sansa_entity.items())
         self.assertEqual(sansa_dict, {'name': 'Sansa', 'family': 'Stark'})
 
     def test_query_paginate_with_offset(self):
-        page_query = self._base_query()
-        page_query.order = 'appearances'
+        query = self._base_query()
         offset = 2
         limit = 3
-        iterator = page_query.fetch(limit=limit, offset=offset)
+        page_query = query.offset(offset).limit(limit).order('appearances')
+        # Make sure no query set before fetch.
+        self.assertRaises(RuntimeError, page_query.cursor)
 
         # Fetch characters.
-        entities, _, cursor = iterator.next_page()
+        entities = page_query.fetch()
         self.assertEqual(len(entities), limit)
         self.assertEqual(entities[0]['name'], 'Robb')
         self.assertEqual(entities[1]['name'], 'Bran')
         self.assertEqual(entities[2]['name'], 'Catelyn')
 
+        # Use cursor to begin next query.
+        cursor = page_query.cursor()
+        next_query = page_query.with_cursor(cursor).offset(0)
+        self.assertEqual(next_query.limit(), limit)
         # Fetch next set of characters.
-        new_iterator = page_query.fetch(limit=limit, offset=0,
-                                        start_cursor=cursor)
-        entities = list(new_iterator)
+        entities = next_query.fetch()
         self.assertEqual(len(entities), limit)
         self.assertEqual(entities[0]['name'], 'Sansa')
         self.assertEqual(entities[1]['name'], 'Jon Snow')
         self.assertEqual(entities[2]['name'], 'Arya')
 
     def test_query_paginate_with_start_cursor(self):
-        page_query = self._base_query()
-        page_query.order = 'appearances'
-        limit = 3
+        query = self._base_query()
         offset = 2
-        iterator = page_query.fetch(limit=limit, offset=offset)
+        limit = 2
+        page_query = query.offset(offset).limit(limit).order('appearances')
+        # Make sure no query set before fetch.
+        self.assertRaises(RuntimeError, page_query.cursor)
 
         # Fetch characters.
-        entities, _, cursor = iterator.next_page()
+        entities = page_query.fetch()
         self.assertEqual(len(entities), limit)
 
         # Use cursor to create a fresh query.
+        cursor = page_query.cursor()
         fresh_query = self._base_query()
-        fresh_query.order = 'appearances'
+        fresh_query = fresh_query.order('appearances').with_cursor(cursor)
 
-        new_entities = list(fresh_query.fetch(start_cursor=cursor,
-                                              limit=limit))
+        new_entities = fresh_query.fetch()
         characters_remaining = len(self.CHARACTERS) - limit - offset
         self.assertEqual(len(new_entities), characters_remaining)
-        self.assertEqual(new_entities[0]['name'], 'Sansa')
-        self.assertEqual(new_entities[2]['name'], 'Arya')
+        self.assertEqual(new_entities[0]['name'], 'Catelyn')
+        self.assertEqual(new_entities[3]['name'], 'Arya')
 
     def test_query_group_by(self):
-        query = self._base_query()
-        query.group_by = ['alive']
+        query = self._base_query().group_by(['alive'])
 
         expected_matches = 2
         # We expect 2, but allow the query to get 1 extra.
-        entities = list(query.fetch(limit=expected_matches + 1))
+        entities = query.fetch(limit=expected_matches + 1)
         self.assertEqual(len(entities), expected_matches)
 
         self.assertEqual(entities[0]['name'], 'Catelyn')
@@ -342,34 +331,19 @@ class TestDatastoreQuery(TestDatastore):
 class TestDatastoreTransaction(TestDatastore):
 
     def test_transaction(self):
-        entity = Entity(key=Key('Company', 'Google'))
+        key = datastore.key.Key.from_path('Company', 'Google')
+        entity = self.dataset.entity(kind=None).key(key)
         entity['url'] = u'www.google.com'
 
-        with Transaction():
-            retrieved_entity = datastore.get(entity.key)
+        with self.dataset.transaction():
+            retrieved_entity = self.dataset.get_entity(key)
             if retrieved_entity is None:
                 entity.save()
                 self.case_entities_to_delete.append(entity)
 
         # This will always return after the transaction.
-        retrieved_entity = datastore.get(entity.key)
-        self.case_entities_to_delete.append(retrieved_entity)
+        retrieved_entity = self.dataset.get_entity(key)
         retrieved_dict = dict(retrieved_entity.items())
         entity_dict = dict(entity.items())
         self.assertEqual(retrieved_dict, entity_dict)
-
-
-def _compare_dataset_ids(dataset_id1, dataset_id2):
-    if dataset_id1 == dataset_id2:
-        return True
-
-    if dataset_id1.startswith('s~') or dataset_id1.startswith('e~'):
-        # If `dataset_id1` is prefixed and not matching, then the only way
-        # they can match is if `dataset_id2` is unprefixed.
-        return dataset_id1[2:] == dataset_id2
-    elif dataset_id2.startswith('s~') or dataset_id2.startswith('e~'):
-        # Here we know `dataset_id1` is unprefixed and `dataset_id2`
-        # is prefixed.
-        return dataset_id1 == dataset_id2[2:]
-
-    return False
+        retrieved_entity.delete()

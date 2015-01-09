@@ -38,18 +38,17 @@ Add some data to your dataset
 Open a Python console and...
 
   >>> from gcloud import datastore
-  >>> datastore.set_default_connection()
-  >>> datastore.set_default_dataset_id('<your-dataset-id>')
-  >>> from gcloud.datastore.query import Query
-  >>> list(Query(kind='Person').fetch())
+  >>> dataset = datastore.get_dataset(
+  >>>     '<your-project-id-here',
+  >>>     '<the e-mail address you copied here>',
+  >>>     '/path/to/<your project>.key')
+  >>> dataset.query().fetch()
   []
-  >>> from gcloud.datastore.entity import Entity
-  >>> from gcloud.datastore.key import Key
-  >>> entity = Entity(key=Key('Person'))
+  >>> entity = dataset.entity('Person')
   >>> entity['name'] = 'Your name'
   >>> entity['age'] = 25
   >>> entity.save()
-  >>> list(Query(kind='Person').fetch())
+  >>> dataset.query('Person').fetch()
   [<Entity{...} {'name': 'Your name', 'age': 25}>]
 
 And that's it!

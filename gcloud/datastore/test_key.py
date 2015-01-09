@@ -1,211 +1,68 @@
-# Copyright 2014 Google Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import unittest2
 
 
 class TestKey(unittest2.TestCase):
 
-    _DEFAULT_DATASET = 'DATASET'
-
-    def setUp(self):
-
-        from gcloud.datastore import _implicit_environ
-        self._replaced_dataset_id = _implicit_environ.DATASET_ID
-        _implicit_environ.DATASET_ID = None
-
-    def tearDown(self):
-        from gcloud.datastore import _implicit_environ
-        _implicit_environ.DATASET_ID = self._replaced_dataset_id
-
     def _getTargetClass(self):
         from gcloud.datastore.key import Key
         return Key
 
-    def _makeOne(self, *args, **kwargs):
-        return self._getTargetClass()(*args, **kwargs)
+    def _makeOne(self, path=None, namespace=None, dataset_id=None):
+        return self._getTargetClass()(path, namespace, dataset_id)
 
-    def _monkeyDatasetID(self, dataset_id=_DEFAULT_DATASET):
-        from gcloud._testing import _Monkey
-        from gcloud.datastore import _implicit_environ
-        return _Monkey(_implicit_environ, DATASET_ID=dataset_id)
-
-    def test_ctor_empty(self):
-        self.assertRaises(ValueError, self._makeOne)
-
-    def test_ctor_no_dataset_id(self):
-        klass = self._getTargetClass()
-        with self._monkeyDatasetID(None):
-            self.assertRaises(ValueError, klass, 'KIND')
-
-    def test_ctor_w_implicit_dataset_id(self):
-        _DATASET = 'DATASET'
-        _KIND = 'KIND'
-        with self._monkeyDatasetID(_DATASET):
-            key = self._makeOne(_KIND)
-        self.assertEqual(key.dataset_id, _DATASET)
-        self.assertEqual(key.namespace, None)
-        self.assertEqual(key.kind, _KIND)
-        self.assertEqual(key.path, [{'kind': _KIND}])
-
-    def test_ctor_w_implicit_dataset_id_empty_path(self):
-        _DATASET = 'DATASET'
-        self.assertRaises(ValueError, self._makeOne, dataset_id=_DATASET)
-
-    def test_ctor_parent(self):
-        _PARENT_KIND = 'KIND1'
-        _PARENT_ID = 1234
-        _PARENT_DATASET = 'DATASET-ALT'
-        _PARENT_NAMESPACE = 'NAMESPACE'
-        _CHILD_KIND = 'KIND2'
-        _CHILD_ID = 2345
-        _PATH = [
-            {'kind': _PARENT_KIND, 'id': _PARENT_ID},
-            {'kind': _CHILD_KIND, 'id': _CHILD_ID},
-        ]
-        parent_key = self._makeOne(_PARENT_KIND, _PARENT_ID,
-                                   dataset_id=_PARENT_DATASET,
-                                   namespace=_PARENT_NAMESPACE)
-        key = self._makeOne(_CHILD_KIND, _CHILD_ID, parent=parent_key)
-        self.assertEqual(key.dataset_id, parent_key.dataset_id)
-        self.assertEqual(key.namespace, parent_key.namespace)
-        self.assertEqual(key.kind, _CHILD_KIND)
-        self.assertEqual(key.path, _PATH)
-        self.assertTrue(key.parent is parent_key)
-
-    def test_ctor_partial_parent(self):
-        parent_key = self._makeOne('KIND', dataset_id=self._DEFAULT_DATASET)
-        with self.assertRaises(ValueError):
-            self._makeOne('KIND2', 1234, parent=parent_key)
-
-    def test_ctor_parent_bad_type(self):
-        with self.assertRaises(AttributeError):
-            self._makeOne('KIND2', 1234, parent=('KIND1', 1234),
-                          dataset_id=self._DEFAULT_DATASET)
-
-    def test_ctor_parent_bad_namespace(self):
-        parent_key = self._makeOne('KIND', 1234, namespace='FOO',
-                                   dataset_id=self._DEFAULT_DATASET)
-        with self.assertRaises(ValueError):
-            self._makeOne('KIND2', 1234, namespace='BAR', parent=parent_key,
-                          dataset_id=self._DEFAULT_DATASET)
-
-    def test_ctor_parent_bad_dataset_id(self):
-        parent_key = self._makeOne('KIND', 1234, dataset_id='FOO')
-        with self.assertRaises(ValueError):
-            self._makeOne('KIND2', 1234, parent=parent_key,
-                          dataset_id='BAR')
-
-    def test_ctor_parent_empty_path(self):
-        parent_key = self._makeOne('KIND', 1234,
-                                   dataset_id=self._DEFAULT_DATASET)
-        with self.assertRaises(ValueError):
-            self._makeOne(parent=parent_key)
+    def test_ctor_defaults(self):
+        key = self._makeOne()
+        self.assertEqual(key._dataset_id, None)
+        self.assertEqual(key.namespace(), None)
+        self.assertEqual(key.kind(), '')
+        self.assertEqual(key.path(), [{'kind': ''}])
 
     def test_ctor_explicit(self):
-        _DATASET = 'DATASET-ALT'
+        _DATASET = 'DATASET'
         _NAMESPACE = 'NAMESPACE'
         _KIND = 'KIND'
         _ID = 1234
         _PATH = [{'kind': _KIND, 'id': _ID}]
-        key = self._makeOne(_KIND, _ID, namespace=_NAMESPACE,
-                            dataset_id=_DATASET)
-        self.assertEqual(key.dataset_id, _DATASET)
-        self.assertEqual(key.namespace, _NAMESPACE)
-        self.assertEqual(key.kind, _KIND)
-        self.assertEqual(key.path, _PATH)
-
-    def test_ctor_bad_kind(self):
-        self.assertRaises(ValueError, self._makeOne, object(),
-                          dataset_id=self._DEFAULT_DATASET)
-
-    def test_ctor_bad_id_or_name(self):
-        self.assertRaises(ValueError, self._makeOne, 'KIND', object(),
-                          dataset_id=self._DEFAULT_DATASET)
-        self.assertRaises(ValueError, self._makeOne, 'KIND', None,
-                          dataset_id=self._DEFAULT_DATASET)
-        self.assertRaises(ValueError, self._makeOne, 'KIND', 10, 'KIND2', None,
-                          dataset_id=self._DEFAULT_DATASET)
+        key = self._makeOne(_PATH, _NAMESPACE, _DATASET)
+        self.assertEqual(key._dataset_id, _DATASET)
+        self.assertEqual(key.namespace(), _NAMESPACE)
+        self.assertEqual(key.kind(), _KIND)
+        self.assertEqual(key.path(), _PATH)
 
     def test__clone(self):
-        _DATASET = 'DATASET-ALT'
+        _DATASET = 'DATASET'
         _NAMESPACE = 'NAMESPACE'
         _KIND = 'KIND'
         _ID = 1234
         _PATH = [{'kind': _KIND, 'id': _ID}]
-        key = self._makeOne(_KIND, _ID, namespace=_NAMESPACE,
-                            dataset_id=_DATASET)
+        key = self._makeOne(_PATH, _NAMESPACE, _DATASET)
         clone = key._clone()
-        self.assertEqual(clone.dataset_id, _DATASET)
-        self.assertEqual(clone.namespace, _NAMESPACE)
-        self.assertEqual(clone.kind, _KIND)
-        self.assertEqual(clone.path, _PATH)
-
-    def test_completed_key_on_partial_w_id(self):
-        key = self._makeOne('KIND', dataset_id=self._DEFAULT_DATASET)
-        _ID = 1234
-        new_key = key.completed_key(_ID)
-        self.assertFalse(key is new_key)
-        self.assertEqual(new_key.id, _ID)
-        self.assertEqual(new_key.name, None)
-
-    def test_completed_key_on_partial_w_name(self):
-        key = self._makeOne('KIND', dataset_id=self._DEFAULT_DATASET)
-        _NAME = 'NAME'
-        new_key = key.completed_key(_NAME)
-        self.assertFalse(key is new_key)
-        self.assertEqual(new_key.id, None)
-        self.assertEqual(new_key.name, _NAME)
-
-    def test_completed_key_on_partial_w_invalid(self):
-        key = self._makeOne('KIND', dataset_id=self._DEFAULT_DATASET)
-        self.assertRaises(ValueError, key.completed_key, object())
-
-    def test_completed_key_on_complete(self):
-        key = self._makeOne('KIND', 1234, dataset_id=self._DEFAULT_DATASET)
-        self.assertRaises(ValueError, key.completed_key, 5678)
+        self.assertEqual(clone._dataset_id, _DATASET)
+        self.assertEqual(clone.namespace(), _NAMESPACE)
+        self.assertEqual(clone.kind(), _KIND)
+        self.assertEqual(clone.path(), _PATH)
 
     def test_to_protobuf_defaults(self):
         from gcloud.datastore.datastore_v1_pb2 import Key as KeyPB
-        _KIND = 'KIND'
-        key = self._makeOne(_KIND, dataset_id=self._DEFAULT_DATASET)
+        key = self._makeOne()
         pb = key.to_protobuf()
         self.assertTrue(isinstance(pb, KeyPB))
-
-        # Check partition ID.
-        self.assertEqual(pb.partition_id.dataset_id, self._DEFAULT_DATASET)
+        self.assertEqual(pb.partition_id.dataset_id, '')
         self.assertEqual(pb.partition_id.namespace, '')
-        self.assertFalse(pb.partition_id.HasField('namespace'))
-
-        # Check the element PB matches the partial key and kind.
         elem, = list(pb.path_element)
-        self.assertEqual(elem.kind, _KIND)
+        self.assertEqual(elem.kind, '')
         self.assertEqual(elem.name, '')
-        self.assertFalse(elem.HasField('name'))
         self.assertEqual(elem.id, 0)
-        self.assertFalse(elem.HasField('id'))
 
-    def test_to_protobuf_w_explicit_dataset_id(self):
-        _DATASET = 'DATASET-ALT'
-        key = self._makeOne('KIND', dataset_id=_DATASET)
+    def test_to_protobuf_w_explicit_dataset_no_prefix(self):
+        _DATASET = 'DATASET'
+        key = self._makeOne(dataset_id=_DATASET)
         pb = key.to_protobuf()
         self.assertEqual(pb.partition_id.dataset_id, _DATASET)
 
     def test_to_protobuf_w_explicit_namespace(self):
         _NAMESPACE = 'NAMESPACE'
-        key = self._makeOne('KIND', namespace=_NAMESPACE,
-                            dataset_id=self._DEFAULT_DATASET)
+        key = self._makeOne(namespace=_NAMESPACE)
         pb = key.to_protobuf()
         self.assertEqual(pb.partition_id.namespace, _NAMESPACE)
 
@@ -214,112 +71,206 @@ class TestKey(unittest2.TestCase):
         _CHILD = 'CHILD'
         _ID = 1234
         _NAME = 'NAME'
-        key = self._makeOne(_PARENT, _NAME, _CHILD, _ID,
-                            dataset_id=self._DEFAULT_DATASET)
+        _PATH = [
+            {'kind': _PARENT, 'name': _NAME},
+            {'kind': _CHILD, 'id': _ID},
+            {},
+        ]
+        key = self._makeOne(path=_PATH)
         pb = key.to_protobuf()
         elems = list(pb.path_element)
-        self.assertEqual(len(elems), 2)
+        self.assertEqual(len(elems), len(_PATH))
         self.assertEqual(elems[0].kind, _PARENT)
         self.assertEqual(elems[0].name, _NAME)
         self.assertEqual(elems[1].kind, _CHILD)
         self.assertEqual(elems[1].id, _ID)
+        self.assertEqual(elems[2].kind, '')
+        self.assertEqual(elems[2].name, '')
+        self.assertEqual(elems[2].id, 0)
 
-    def test_to_protobuf_w_no_kind(self):
-        key = self._makeOne('KIND', dataset_id=self._DEFAULT_DATASET)
-        # Force the 'kind' to be unset. Maybe `to_protobuf` should fail
-        # on this? The backend certainly will.
-        key._path[-1].pop('kind')
-        pb = key.to_protobuf()
-        self.assertFalse(pb.path_element[0].HasField('kind'))
+    def test_from_path_empty(self):
+        key = self._getTargetClass().from_path()
+        self.assertEqual(key._dataset_id, None)
+        self.assertEqual(key.namespace(), None)
+        self.assertEqual(key.kind(), '')
+        self.assertEqual(key.path(), [{'kind': ''}])
 
-    def test_delete_explicit_connection(self):
-        from gcloud.datastore.test_connection import _Connection
+    def test_from_path_single_element(self):
+        self.assertRaises(ValueError, self._getTargetClass().from_path, 'abc')
 
-        cnxn = _Connection()
-        key = self._makeOne('KIND', 1234, dataset_id=self._DEFAULT_DATASET)
-        result = key.delete(connection=cnxn)
-        self.assertEqual(result, None)
-        self.assertEqual(cnxn._called_dataset_id, self._DEFAULT_DATASET)
-        self.assertEqual(cnxn._called_key_pbs, [key.to_protobuf()])
+    def test_from_path_three_elements(self):
+        self.assertRaises(ValueError, self._getTargetClass().from_path,
+                          'abc', 'def', 'ghi')
 
-    def test_delete_implicit_connection(self):
-        from gcloud._testing import _Monkey
-        from gcloud.datastore import _implicit_environ
-        from gcloud.datastore.test_connection import _Connection
+    def test_from_path_two_elements_second_string(self):
+        key = self._getTargetClass().from_path('abc', 'def')
+        self.assertEqual(key.kind(), 'abc')
+        self.assertEqual(key.path(), [{'kind': 'abc', 'name': 'def'}])
 
-        cnxn = _Connection()
-        key = self._makeOne('KIND', 1234, dataset_id=self._DEFAULT_DATASET)
-        with _Monkey(_implicit_environ, CONNECTION=cnxn):
-            result = key.delete()
+    def test_from_path_two_elements_second_int(self):
+        key = self._getTargetClass().from_path('abc', 123)
+        self.assertEqual(key.kind(), 'abc')
+        self.assertEqual(key.path(), [{'kind': 'abc', 'id': 123}])
 
-        self.assertEqual(result, None)
-        self.assertEqual(cnxn._called_dataset_id, self._DEFAULT_DATASET)
-        self.assertEqual(cnxn._called_key_pbs, [key.to_protobuf()])
-
-    def test_delete_no_connection(self):
-        from gcloud.datastore import _implicit_environ
-
-        self.assertEqual(_implicit_environ.CONNECTION, None)
-        key = self._makeOne('KIND', 1234, dataset_id=self._DEFAULT_DATASET)
-        with self.assertRaises(AttributeError):
-            key.delete()
+    def test_from_path_nested(self):
+        key = self._getTargetClass().from_path('abc', 'def', 'ghi', 123)
+        self.assertEqual(key.kind(), 'ghi')
+        expected_path = [
+            {'kind': 'abc', 'name': 'def'},
+            {'kind': 'ghi', 'id': 123},
+        ]
+        self.assertEqual(key.path(), expected_path)
 
     def test_is_partial_no_name_or_id(self):
-        key = self._makeOne('KIND', dataset_id=self._DEFAULT_DATASET)
-        self.assertTrue(key.is_partial)
+        key = self._makeOne()
+        self.assertTrue(key.is_partial())
 
     def test_is_partial_w_id(self):
+        _KIND = 'KIND'
         _ID = 1234
-        key = self._makeOne('KIND', _ID, dataset_id=self._DEFAULT_DATASET)
-        self.assertFalse(key.is_partial)
+        _PATH = [{'kind': _KIND, 'id': _ID}]
+        key = self._makeOne(path=_PATH)
+        self.assertFalse(key.is_partial())
 
     def test_is_partial_w_name(self):
+        _KIND = 'KIND'
         _NAME = 'NAME'
-        key = self._makeOne('KIND', _NAME, dataset_id=self._DEFAULT_DATASET)
-        self.assertFalse(key.is_partial)
+        _PATH = [{'kind': _KIND, 'name': _NAME}]
+        key = self._makeOne(path=_PATH)
+        self.assertFalse(key.is_partial())
+
+    def test_namespace_setter(self):
+        _DATASET = 'DATASET'
+        _NAMESPACE = 'NAMESPACE'
+        _KIND = 'KIND'
+        _NAME = 'NAME'
+        _PATH = [{'kind': _KIND, 'name': _NAME}]
+        key = self._makeOne(path=_PATH, dataset_id=_DATASET)
+        after = key.namespace(_NAMESPACE)
+        self.assertFalse(after is key)
+        self.assertTrue(isinstance(after, self._getTargetClass()))
+        self.assertEqual(after._dataset_id, _DATASET)
+        self.assertEqual(after.namespace(), _NAMESPACE)
+        self.assertEqual(after.path(), _PATH)
+
+    def test_path_setter(self):
+        _DATASET = 'DATASET'
+        _NAMESPACE = 'NAMESPACE'
+        _KIND = 'KIND'
+        _NAME = 'NAME'
+        _PATH = [{'kind': _KIND, 'name': _NAME}]
+        key = self._makeOne(namespace=_NAMESPACE, dataset_id=_DATASET)
+        after = key.path(_PATH)
+        self.assertFalse(after is key)
+        self.assertTrue(isinstance(after, self._getTargetClass()))
+        self.assertEqual(after._dataset_id, _DATASET)
+        self.assertEqual(after.namespace(), _NAMESPACE)
+        self.assertEqual(after.path(), _PATH)
+
+    def test_kind_getter_empty_path(self):
+        _DATASET = 'DATASET'
+        _NAMESPACE = 'NAMESPACE'
+        key = self._makeOne(namespace=_NAMESPACE, dataset_id=_DATASET)
+        key._path = ()  # edge case
+        self.assertEqual(key.kind(), None)
+
+    def test_kind_setter(self):
+        _DATASET = 'DATASET'
+        _NAMESPACE = 'NAMESPACE'
+        _KIND_BEFORE = 'KIND_BEFORE'
+        _KIND_AFTER = 'KIND_AFTER'
+        _NAME = 'NAME'
+        _PATH = [{'kind': _KIND_BEFORE, 'name': _NAME}]
+        key = self._makeOne(_PATH, _NAMESPACE, _DATASET)
+        after = key.kind(_KIND_AFTER)
+        self.assertFalse(after is key)
+        self.assertTrue(isinstance(after, self._getTargetClass()))
+        self.assertEqual(after._dataset_id, _DATASET)
+        self.assertEqual(after.namespace(), _NAMESPACE)
+        self.assertEqual(after.path(), [{'kind': _KIND_AFTER, 'name': _NAME}])
+
+    def test_id_getter_empty_path(self):
+        key = self._makeOne()
+        key._path = ()  # edge case
+        self.assertEqual(key.id(), None)
+
+    def test_id_setter(self):
+        _DATASET = 'DATASET'
+        _NAMESPACE = 'NAMESPACE'
+        _KIND = 'KIND'
+        _ID_BEFORE = 1234
+        _ID_AFTER = 5678
+        _PATH = [{'kind': _KIND, 'id': _ID_BEFORE}]
+        key = self._makeOne(_PATH, _NAMESPACE, _DATASET)
+        after = key.id(_ID_AFTER)
+        self.assertFalse(after is key)
+        self.assertTrue(isinstance(after, self._getTargetClass()))
+        self.assertEqual(after._dataset_id, _DATASET)
+        self.assertEqual(after.namespace(), _NAMESPACE)
+        self.assertEqual(after.path(), [{'kind': _KIND, 'id': _ID_AFTER}])
+
+    def test_name_getter_empty_path(self):
+        key = self._makeOne()
+        key._path = ()  # edge case
+        self.assertEqual(key.name(), None)
+
+    def test_name_setter(self):
+        _DATASET = 'DATASET'
+        _NAMESPACE = 'NAMESPACE'
+        _KIND = 'KIND'
+        _NAME_BEFORE = 'NAME_BEFORE'
+        _NAME_AFTER = 'NAME_AFTER'
+        _PATH = [{'kind': _KIND, 'name': _NAME_BEFORE}]
+        key = self._makeOne(_PATH, _NAMESPACE, _DATASET)
+        after = key.name(_NAME_AFTER)
+        self.assertFalse(after is key)
+        self.assertTrue(isinstance(after, self._getTargetClass()))
+        self.assertEqual(after._dataset_id, _DATASET)
+        self.assertEqual(after.namespace(), _NAMESPACE)
+        self.assertEqual(after.path(), [{'kind': _KIND, 'name': _NAME_AFTER}])
 
     def test_id_or_name_no_name_or_id(self):
-        key = self._makeOne('KIND', dataset_id=self._DEFAULT_DATASET)
-        self.assertEqual(key.id_or_name, None)
+        key = self._makeOne()
+        self.assertEqual(key.id_or_name(), None)
 
     def test_id_or_name_no_name_or_id_child(self):
-        key = self._makeOne('KIND1', 1234, 'KIND2',
-                            dataset_id=self._DEFAULT_DATASET)
-        self.assertEqual(key.id_or_name, None)
+        _KIND = 'KIND'
+        _NAME = 'NAME'
+        _ID = 5678
+        _PATH = [{'kind': _KIND, 'id': _ID, 'name': _NAME}, {'kind': ''}]
+        key = self._makeOne(path=_PATH)
+        self.assertEqual(key.id_or_name(), None)
 
     def test_id_or_name_w_id_only(self):
+        _KIND = 'KIND'
         _ID = 1234
-        key = self._makeOne('KIND', _ID, dataset_id=self._DEFAULT_DATASET)
-        self.assertEqual(key.id_or_name, _ID)
+        _PATH = [{'kind': _KIND, 'id': _ID}]
+        key = self._makeOne(path=_PATH)
+        self.assertEqual(key.id_or_name(), _ID)
+
+    def test_id_or_name_w_id_and_name(self):
+        _KIND = 'KIND'
+        _ID = 1234
+        _NAME = 'NAME'
+        _PATH = [{'kind': _KIND, 'id': _ID, 'name': _NAME}]
+        key = self._makeOne(path=_PATH)
+        self.assertEqual(key.id_or_name(), _ID)
 
     def test_id_or_name_w_name_only(self):
+        _KIND = 'KIND'
         _NAME = 'NAME'
-        key = self._makeOne('KIND', _NAME, dataset_id=self._DEFAULT_DATASET)
-        self.assertEqual(key.id_or_name, _NAME)
+        _PATH = [{'kind': _KIND, 'name': _NAME}]
+        key = self._makeOne(path=_PATH)
+        self.assertEqual(key.id_or_name(), _NAME)
 
     def test_parent_default(self):
-        key = self._makeOne('KIND', dataset_id=self._DEFAULT_DATASET)
-        self.assertEqual(key.parent, None)
+        key = self._makeOne()
+        self.assertEqual(key.parent(), None)
 
     def test_parent_explicit_top_level(self):
-        key = self._makeOne('KIND', 1234, dataset_id=self._DEFAULT_DATASET)
-        self.assertEqual(key.parent, None)
+        key = self._getTargetClass().from_path('abc', 'def')
+        self.assertEqual(key.parent(), None)
 
     def test_parent_explicit_nested(self):
-        _PARENT_KIND = 'KIND1'
-        _PARENT_ID = 1234
-        _PARENT_PATH = [{'kind': _PARENT_KIND, 'id': _PARENT_ID}]
-        key = self._makeOne(_PARENT_KIND, _PARENT_ID, 'KIND2',
-                            dataset_id=self._DEFAULT_DATASET)
-        self.assertEqual(key.parent.path, _PARENT_PATH)
-
-    def test_parent_multiple_calls(self):
-        _PARENT_KIND = 'KIND1'
-        _PARENT_ID = 1234
-        _PARENT_PATH = [{'kind': _PARENT_KIND, 'id': _PARENT_ID}]
-        key = self._makeOne(_PARENT_KIND, _PARENT_ID, 'KIND2',
-                            dataset_id=self._DEFAULT_DATASET)
-        parent = key.parent
-        self.assertEqual(parent.path, _PARENT_PATH)
-        new_parent = key.parent
-        self.assertTrue(parent is new_parent)
+        key = self._getTargetClass().from_path('abc', 'def', 'ghi', 123)
+        self.assertEqual(key.parent().path(), [{'kind': 'abc', 'name': 'def'}])

@@ -1,17 +1,3 @@
-# Copyright 2014 Google Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Create / interact with gcloud storage connections."""
 
 import base64
@@ -24,8 +10,6 @@ from Crypto.Hash import SHA256
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_v1_5
 from OpenSSL import crypto
-from oauth2client import client
-from oauth2client import service_account
 import pytz
 
 from gcloud.connection import Connection as _Base
@@ -43,88 +27,21 @@ def _utcnow():  # pragma: NO COVER testing replaces
     return datetime.datetime.utcnow()
 
 
-def _get_pem_key(credentials):
-    """Gets RSA key for a PEM payload from a credentials object.
-
-    :type credentials: :class:`client.SignedJwtAssertionCredentials`,
-                       :class:`service_account._ServiceAccountCredentials`
-    :param credentials: The credentials used to create an RSA key
-                        for signing text.
-
-    :rtype: :class:`Crypto.PublicKey.RSA._RSAobj`
-    :returns: An RSA object used to sign text.
-    :raises: `TypeError` if `credentials` is the wrong type.
-    """
-    if isinstance(credentials, client.SignedJwtAssertionCredentials):
-        # Take our PKCS12 (.p12) key and make it into a RSA key we can use.
-        pkcs12 = crypto.load_pkcs12(
-            base64.b64decode(credentials.private_key),
-            'notasecret')
-        pem_text = crypto.dump_privatekey(
-            crypto.FILETYPE_PEM, pkcs12.get_privatekey())
-    elif isinstance(credentials, service_account._ServiceAccountCredentials):
-        pem_text = credentials._private_key_pkcs8_text
-    else:
-        raise TypeError((credentials,
-                         'not a valid service account credentials type'))
-
-    return RSA.importKey(pem_text)
-
-
-def _get_signed_query_params(credentials, expiration, signature_string):
-    """Gets query parameters for creating a signed URL.
-
-    :type credentials: :class:`client.SignedJwtAssertionCredentials`,
-                       :class:`service_account._ServiceAccountCredentials`
-    :param credentials: The credentials used to create an RSA key
-                        for signing text.
-
-    :type expiration: int or long
-    :param expiration: When the signed URL should expire.
-
-    :type signature_string: string
-    :param signature_string: The string to be signed by the credentials.
-
-    :rtype: dict
-    :returns: Query parameters matching the signing credentials with a
-              signed payload.
-    """
-    pem_key = _get_pem_key(credentials)
-    # Sign the string with the RSA key.
-    signer = PKCS1_v1_5.new(pem_key)
-    signature_hash = SHA256.new(signature_string)
-    signature_bytes = signer.sign(signature_hash)
-    signature = base64.b64encode(signature_bytes)
-
-    if isinstance(credentials, client.SignedJwtAssertionCredentials):
-        service_account_name = credentials.service_account_name
-    elif isinstance(credentials, service_account._ServiceAccountCredentials):
-        service_account_name = credentials._service_account_email
-    # We know one of the above must occur since `_get_pem_key` fails if not.
-    return {
-        'GoogleAccessId': service_account_name,
-        'Expires': str(expiration),
-        'Signature': signature,
-    }
-
-
 class Connection(_Base):
     """A connection to Google Cloud Storage via the JSON REST API.
 
-    This class should understand only the basic types (and protobufs) in
-    method arguments, however should be capable of returning advanced
-    types.
+    This class should understand only the basic types (and protobufs)
+    in method arguments, however should be capable of returning advanced types.
 
-    See :class:`gcloud.connection.Connection` for a full list of
-    parameters.  :class:`Connection` differs only in needing a project
-    name (which you specify when creating a project in the Cloud
-    Console).
+    See :class:`gcloud.connection.Connection` for a full list of parameters.
+    :class:`Connection` differs only in needing a project name
+    (which you specify when creating a project in the Cloud Console).
 
     A typical use of this is to operate on
     :class:`gcloud.storage.bucket.Bucket` objects::
 
       >>> from gcloud import storage
-      >>> connection = storage.get_connection(project)
+      >>> connection = storage.get_connection(project, email, key_path)
       >>> bucket = connection.create_bucket('my-bucket-name')
 
     You can then delete this bucket::
@@ -174,7 +91,7 @@ class Connection(_Base):
         return self.lookup(bucket_name) is not None
 
     def build_api_url(self, path, query_params=None, api_base_url=None,
-                      api_version=None, upload=False):
+                      api_version=None):
         """Construct an API url given a few components, some optional.
 
         Typically, you shouldn't need to use this method.
@@ -195,16 +112,9 @@ class Connection(_Base):
                             Typically you shouldn't provide this and instead
                             use the default for the library.
 
-        :type upload: boolean
-        :param upload: True if the URL is for uploading purposes.
-
         :rtype: string
         :returns: The URL assembled from the pieces provided.
         """
-        api_base_url = api_base_url or self.API_BASE_URL
-        if upload:
-            api_base_url += '/upload'
-
         url = self.API_URL_TEMPLATE.format(
             api_base_url=(api_base_url or self.API_BASE_URL),
             api_version=(api_version or self.API_VERSION),
@@ -302,7 +212,7 @@ class Connection(_Base):
                             latest API version supported by
                             gcloud-python.
 
-        :type expect_json: boolean
+        :type expect_json: bool
         :param expect_json: If True, this method will try to parse the
                             response as JSON and raise an exception if
                             that cannot be done.  Default is True.
@@ -343,7 +253,7 @@ class Connection(_Base):
         operations are identical::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> for bucket in connection.get_all_buckets():
           >>>   print bucket
           >>> # ... is the same as ...
@@ -368,7 +278,7 @@ class Connection(_Base):
 
           >>> from gcloud import storage
           >>> from gcloud.storage import exceptions
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> try:
           >>>   bucket = connection.get_bucket('my-bucket')
           >>> except exceptions.NotFound:
@@ -392,7 +302,7 @@ class Connection(_Base):
         than catching an exception::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> bucket = connection.get_bucket('doesnt-exist')
           >>> print bucket
           None
@@ -417,7 +327,7 @@ class Connection(_Base):
         For example::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, client, key_path)
           >>> bucket = connection.create_bucket('my-bucket')
           >>> print bucket
           <Bucket: my-bucket>
@@ -442,7 +352,7 @@ class Connection(_Base):
         a bucket object::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> connection.delete_bucket('my-bucket')
           True
 
@@ -464,10 +374,10 @@ class Connection(_Base):
         :type bucket: string or :class:`gcloud.storage.bucket.Bucket`
         :param bucket: The bucket name (or bucket object) to create.
 
-        :type force: boolean
+        :type force: bool
         :param full: If True, empties the bucket's objects then deletes it.
 
-        :rtype: boolean
+        :rtype: bool
         :returns: True if the bucket was deleted.
         :raises: :class:`gcloud.storage.exceptions.NotFound` if the
                  bucket doesn't exist, or
@@ -546,10 +456,26 @@ class Connection(_Base):
             str(expiration),
             resource])
 
+        # Take our PKCS12 (.p12) key and make it into a RSA key we can use...
+        pkcs12 = crypto.load_pkcs12(
+            base64.b64decode(self.credentials.private_key),
+            'notasecret')
+        pem = crypto.dump_privatekey(
+            crypto.FILETYPE_PEM, pkcs12.get_privatekey())
+        pem_key = RSA.importKey(pem)
+
+        # Sign the string with the RSA key.
+        signer = PKCS1_v1_5.new(pem_key)
+        signature_hash = SHA256.new(signature_string)
+        signature_bytes = signer.sign(signature_hash)
+        signature = base64.b64encode(signature_bytes)
+
         # Set the right query parameters.
-        query_params = _get_signed_query_params(self.credentials,
-                                                expiration,
-                                                signature_string)
+        query_params = {
+            'GoogleAccessId': self.credentials.service_account_name,
+            'Expires': str(expiration),
+            'Signature': signature,
+        }
 
         # Return the built URL.
         return '{endpoint}{resource}?{querystring}'.format(
@@ -560,9 +486,8 @@ class Connection(_Base):
 class _BucketIterator(Iterator):
     """An iterator listing all buckets.
 
-    You shouldn't have to use this directly, but instead should use the
-    helper methods on :class:`gcloud.storage.connection.Connection`
-    objects.
+    You shouldn't have to use this directly, but instead should use the helper
+    methods on :class:`gcloud.storage.connection.Connection` objects.
 
     :type connection: :class:`gcloud.storage.connection.Connection`
     :param connection: The connection to use for querying the list of buckets.

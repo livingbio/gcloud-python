@@ -1,44 +1,31 @@
-# Copyright 2014 Google Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Script to populate datastore with regression test data."""
 
 from six.moves import zip
 
 from gcloud import datastore
-from gcloud.datastore.entity import Entity
-from gcloud.datastore.key import Key
-from gcloud.datastore.transaction import Transaction
+# This assumes the command is being run via tox hence the
+# repository root is the current directory.
+from regression import regression_utils
 
 
-datastore._DATASET_ENV_VAR_NAME = 'GCLOUD_TESTS_DATASET_ID'
-datastore.set_default_dataset_id()
-datastore.set_default_connection()
-
-
-ANCESTOR = ('Book', 'GoT')
-RICKARD = ANCESTOR + ('Character', 'Rickard')
-EDDARD = RICKARD + ('Character', 'Eddard')
+ANCESTOR = {'kind': 'Book', 'name': 'GoT'}
+RICKARD = {'kind': 'Character', 'name': 'Rickard'}
+EDDARD = {'kind': 'Character', 'name': 'Eddard'}
 KEY_PATHS = [
-    RICKARD,
-    EDDARD,
-    ANCESTOR + ('Character', 'Catelyn'),
-    EDDARD + ('Character', 'Arya'),
-    EDDARD + ('Character', 'Sansa'),
-    EDDARD + ('Character', 'Robb'),
-    EDDARD + ('Character', 'Bran'),
-    EDDARD + ('Character', 'Jon Snow'),
+    [ANCESTOR, RICKARD],
+    [ANCESTOR, RICKARD, EDDARD],
+    [ANCESTOR,
+     {'kind': 'Character', 'name': 'Catelyn'}],
+    [ANCESTOR, RICKARD, EDDARD,
+     {'kind': 'Character', 'name': 'Arya'}],
+    [ANCESTOR, RICKARD, EDDARD,
+     {'kind': 'Character', 'name': 'Sansa'}],
+    [ANCESTOR, RICKARD, EDDARD,
+     {'kind': 'Character', 'name': 'Robb'}],
+    [ANCESTOR, RICKARD, EDDARD,
+     {'kind': 'Character', 'name': 'Bran'}],
+    [ANCESTOR, RICKARD, EDDARD,
+     {'kind': 'Character', 'name': 'Jon Snow'}],
 ]
 CHARACTERS = [
     {
@@ -86,12 +73,14 @@ CHARACTERS = [
 
 
 def add_characters():
-    with Transaction():
+    dataset = regression_utils.get_dataset()
+    with dataset.transaction():
         for key_path, character in zip(KEY_PATHS, CHARACTERS):
-            if key_path[-1] != character['name']:
+            if key_path[-1]['name'] != character['name']:
                 raise ValueError(('Character and key don\'t agree',
                                   key_path, character))
-            entity = Entity(key=Key(*key_path))
+            key = datastore.key.Key(path=key_path)
+            entity = datastore.entity.Entity(dataset=dataset).key(key)
             entity.update(character)
             entity.save()
             print('Adding Character %s %s' % (character['name'],

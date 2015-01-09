@@ -1,5 +1,4 @@
 language: python
-sudo: false
 
 before_install:
   - git clone https://github.com/GoogleCloudPlatform/gcloud-python-wheels

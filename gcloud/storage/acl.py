@@ -1,17 +1,3 @@
-# Copyright 2014 Google Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Manipulate access control lists that Cloud Storage provides.
 
 :class:`gcloud.storage.bucket.Bucket` has a getting method that creates
@@ -19,7 +5,7 @@ an ACL object under the hood, and you can interact with that using
 :func:`gcloud.storage.bucket.Bucket.acl`::
 
   >>> from gcloud import storage
-  >>> connection = storage.get_connection(project)
+  >>> connection = storage.get_connection(project, email, key_path)
   >>> bucket = connection.get_bucket(bucket_name)
   >>> acl = bucket.acl
 
@@ -242,7 +228,7 @@ class ACL(object):
         :type entity: :class:`_ACLEntity`
         :param entity: The entity to check for existence in this ACL.
 
-        :rtype: boolean
+        :rtype: bool
         :returns: True of the entity exists in the ACL.
         """
         self._ensure_loaded()

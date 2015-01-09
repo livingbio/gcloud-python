@@ -3,11 +3,11 @@
   :hidden:
 
   datastore-api
+  datastore-dataset
   datastore-entities
   datastore-keys
-  datastore-queries
   datastore-transactions
-  datastore-batches
+  datastore-queries
   storage-api
   storage-buckets
   storage-keys
@@ -29,12 +29,11 @@ Cloud Datastore
 .. code-block:: python
 
   from gcloud import datastore
-  datastore.set_default_connection()
-  datastore.set_default_dataset_id('<dataset-id>')
-
-  from gcloud.datastore.entity import Entity
-  from gcloud.datastore.key import Key
-  entity = Entity(key=Key('Person'))
+  dataset = datastore.get_dataset(
+      '<your-project-id>',
+      '<service-account-email>',
+      '/path/to/your/key')
+  entity = dataset.entity('Person')
   entity['name'] = 'Your name'
   entity['age'] = 25
   entity.save()
@@ -47,8 +46,13 @@ Cloud Storage
 .. _Google Cloud Storage: https://developers.google.com/storage/
 
 .. code-block:: python
-
+  
   from gcloud import storage
-  bucket = storage.get_bucket('<your-bucket-name>', '<your-project-id>')
+  bucket = storage.get_bucket(
+      '<your-bucket-name>',
+      '<your-project-id>',
+      '<service-account-email>',
+      '/path/to/your/key')
   key = bucket.new_key('my-test-file.txt')
   key = key.upload_contents_from_string('this is test content!')
+  

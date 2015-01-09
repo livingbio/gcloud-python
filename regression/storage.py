@@ -1,17 +1,3 @@
-# Copyright 2014 Google Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from Crypto.Hash import MD5
 import base64
 import httplib2
@@ -133,17 +119,6 @@ class TestStorageWriteFiles(TestStorageFiles):
         with open(file_data['path'], 'rb') as file_obj:
             self.bucket.upload_file_object(file_obj, key=key)
             self.case_keys_to_delete.append(key)
-
-        key._properties.clear()  # force a reload
-        self.assertEqual(key.md5_hash, file_data['hash'])
-
-    def test_small_file_write_from_filename(self):
-        key = self.bucket.new_key('LargeFile')
-        self.assertEqual(key._properties, {})
-
-        file_data = self.FILES['simple']
-        key.upload_from_filename(file_data['path'])
-        self.case_keys_to_delete.append(key)
 
         key._properties.clear()  # force a reload
         self.assertEqual(key.md5_hash, file_data['hash'])

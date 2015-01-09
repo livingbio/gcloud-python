@@ -1,17 +1,3 @@
-# Copyright 2014 Google Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Create / interact with gcloud storage buckets."""
 
 import os
@@ -150,7 +136,7 @@ class Bucket(_PropertyMixin):
         This will return None if the key doesn't exist::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> bucket = connection.get_bucket('my-bucket')
           >>> print bucket.get_key('/path/to/key.txt')
           <Key: my-bucket, /path/to/key.txt>
@@ -249,14 +235,14 @@ class Bucket(_PropertyMixin):
 
         The bucket **must** be empty in order to delete it.  If the
         bucket doesn't exist, this will raise a
-        :class:`gcloud.storage.exceptions.NotFound`.  If the bucket is
-        not empty, this will raise an Exception.
+        :class:`gcloud.storage.exceptions.NotFound`.  If the bucket
+        is not empty, this will raise an Exception.
 
         If you want to delete a non-empty bucket you can pass in a force
         parameter set to true.  This will iterate through the bucket's
         keys and delete the related objects, before deleting the bucket.
 
-        :type force: boolean
+        :type force: bool
         :param full: If True, empties the bucket's objects then deletes it.
 
         :raises: :class:`gcloud.storage.exceptions.NotFound` if the
@@ -269,14 +255,14 @@ class Bucket(_PropertyMixin):
     def delete_key(self, key):
         """Deletes a key from the current bucket.
 
-        If the key isn't found, raise a
-        :class:`gcloud.storage.exceptions.NotFound`.
+        If the key isn't found,
+        this will throw a :class:`gcloud.storage.exceptions.NotFound`.
 
         For example::
 
           >>> from gcloud import storage
           >>> from gcloud.storage import exceptions
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> bucket = connection.get_bucket('my-bucket')
           >>> print bucket.get_all_keys()
           [<Key: my-bucket, my-file.txt>]
@@ -358,7 +344,7 @@ class Bucket(_PropertyMixin):
         For example::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> bucket = connection.get_bucket('my-bucket')
           >>> bucket.upload_file('~/my-file.txt', 'remote-text-file.txt')
           >>> print bucket.get_all_keys()
@@ -369,7 +355,7 @@ class Bucket(_PropertyMixin):
         path)::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> bucket = connection.get_bucket('my-bucket')
           >>> bucket.upload_file('~/my-file.txt')
           >>> print bucket.get_all_keys()
@@ -398,7 +384,7 @@ class Bucket(_PropertyMixin):
         For example::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> bucket = connection.get_bucket('my-bucket')
           >>> bucket.upload_file(open('~/my-file.txt'), 'remote-text-file.txt')
           >>> print bucket.get_all_keys()
@@ -409,7 +395,7 @@ class Bucket(_PropertyMixin):
         path)::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email, key_path)
           >>> bucket = connection.get_bucket('my-bucket')
           >>> bucket.upload_file(open('~/my-file.txt'))
           >>> print bucket.get_all_keys()
@@ -636,7 +622,7 @@ class Bucket(_PropertyMixin):
         See:  https://cloud.google.com/storage/docs/object-versioning for
         details.
 
-        :type value: convertible to boolean
+        :type value: convertible to bool
         :param value: should versioning be anabled for the bucket?
         """
         self._patch_properties({'versioning': {'enabled': bool(value)}})
@@ -655,7 +641,8 @@ class Bucket(_PropertyMixin):
         of an index page and a page to use when a key isn't found::
 
           >>> from gcloud import storage
-          >>> connection = storage.get_connection(project)
+          >>> connection = storage.get_connection(project, email,
+                                                  private_key_path)
           >>> bucket = connection.get_bucket(bucket_name)
           >>> bucket.configure_website('index.html', '404.html')
 
@@ -694,11 +681,11 @@ class Bucket(_PropertyMixin):
     def make_public(self, recursive=False, future=False):
         """Make a bucket public.
 
-        :type recursive: boolean
+        :type recursive: bool
         :param recursive: If True, this will make all keys inside the bucket
                           public as well.
 
-        :type future: boolean
+        :type future: bool
         :param future: If True, this will make all objects created in the
                        future public as well.
         """

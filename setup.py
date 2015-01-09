@@ -1,14 +1,14 @@
-import os
+import sys
 
 
-from setuptools import setup
-from setuptools import find_packages
+try:
+    from setuptools import setup, find_packages
+except ImportError:
+    from distutils.core import setup, find_packages
 
-here = os.path.abspath(os.path.dirname(__file__))
 
-
-with open(os.path.join(here, 'README.rst')) as f:
-    README = f.read()
+if sys.version_info <= (2, 5):
+    raise Exception('Requires Python Version 2.6 or above... exiting.')
 
 
 REQUIREMENTS = [
@@ -27,7 +27,6 @@ setup(
     description='API Client library for Google Cloud',
     author='JJ Geewax',
     author_email='jj@geewax.org',
-    long_description=README,
     scripts=[],
     url='https://github.com/GoogleCloudPlatform/gcloud-python',
     packages=find_packages(),

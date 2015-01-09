@@ -1,17 +1,3 @@
-# Copyright 2014 Google Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """ Shared implementation of connections to API servers."""
 
 from pkg_resources import get_distribution
@@ -22,8 +8,11 @@ import httplib2
 class Connection(object):
     """A generic connection to Google Cloud Platform.
 
-    Subclasses should understand only the basic types in method arguments,
-    however they should be capable of returning advanced types.
+    Subclasses should understand
+    only the basic types
+    in method arguments,
+    however they should be capable
+    of returning advanced types.
     """
 
     API_BASE_URL = 'https://www.googleapis.com'
@@ -36,10 +25,8 @@ class Connection(object):
     """The user agent for gcloud-python requests."""
 
     def __init__(self, credentials=None):
-        """Constructor for Connection.
-
-        :type credentials: :class:`oauth2client.client.OAuth2Credentials` or
-                           :class:`NoneType`
+        """
+        :type credentials: :class:`oauth2client.client.OAuth2Credentials`
         :param credentials: The OAuth2 Credentials to use for this connection.
         """
         self._http = None
@@ -47,10 +34,8 @@ class Connection(object):
 
     @property
     def credentials(self):
-        """Getter for current credentials.
-
-        :rtype: :class:`oauth2client.client.OAuth2Credentials` or
-                :class:`NoneType`
+        """
+        :rtype: :class:`oauth2client.client.OAuth2Credentials`, or None
         :returns: The credentials object associated with this connection.
         """
         return self._credentials
